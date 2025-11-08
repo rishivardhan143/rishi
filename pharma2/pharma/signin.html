@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PharmaChain Sign In</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: linear-gradient(135deg, #0d1117, #161b22);
+    }
+    .signin-box {
+      background-color: #1c2128;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+      width: 350px;
+      text-align: center;
+    }
+    .signin-box h1 {
+      color: #58a6ff;
+      margin-bottom: 1rem;
+    }
+    input, select {
+      width: 100%;
+      padding: 0.7rem;
+      margin-bottom: 1rem;
+      border: none;
+      border-radius: 6px;
+      background-color: #21262d;
+      color: #e6edf3;
+    }
+    input:focus {
+      outline: 2px solid #58a6ff;
+    }
+    button {
+      width: 100%;
+      background-color: #238636;
+      color: white;
+      padding: 0.7rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    button:hover {
+      background-color: #2ea043;
+    }
+    .footer-text {
+      margin-top: 1rem;
+      color: #8b949e;
+    }
+    .footer-text a {
+      color: #58a6ff;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="signin-box">
+    <h1>Sign In</h1>
+    <label style="color:#cbd5e1; text-align:left; display:block; margin-bottom:6px">Role</label>
+    <select id="login-role" style="width:100%; padding:8px; border-radius:6px; margin-bottom:10px; background:#21262d; color:#e6edf3; border:none">
+      <option>Manufacturer</option>
+      <option>FDA</option>
+      <option>Distributor</option>
+      <option>Pharmacy</option>
+      <option>Patient</option>
+    </select>
+    <input type="text" id="login-name" placeholder="Username" />
+  <input type="text" id="register-id" placeholder="Registration ID (required)" />
+    <input type="password" id="login-pw" placeholder="Password" />
+    <button id="btn-login" style="background:#2563eb">Sign In</button>
+    <div class="footer-text">
+      Need an account? <a href="register.html">Register here</a>
+    </div>
+  </div>
+
+  <script>
+    // helper: hash password using SubtleCrypto SHA-256 -> hex
+    async function hashPassword(pw) {
+      try {
+        if (window.crypto && crypto.subtle && typeof crypto.subtle.digest === 'function') {
+          const enc = new TextEncoder();
+          const data = enc.encode(pw);
+          const hash = await crypto.subtle.digest('SHA-256', data);
+          return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+        }
+      } catch (e) {
+        console.warn('SubtleCrypto error, falling back to simple hash', e);
+      }
+      // fallback: simple deterministic non-cryptographic hash for demo purposes
+      let h = 5381;
+      for (let i = 0; i < pw.length; i++) h = ((h << 5) + h) + pw.charCodeAt(i) & 0xffffffff;
+      return (h >>> 0).toString(16).padStart(8, '0');
+    }
+
+    function getUsers() {
+      try { return JSON.parse(localStorage.getItem('pharma_users')||'[]'); } catch(e){return []}
+    }
+
+    document.getElementById('btn-login').addEventListener('click', async () => {
+      console.log('btn-login clicked');
+      try {
+        const role = document.getElementById('login-role').value;
+        const name = document.getElementById('login-name').value?.trim();
+        const pw = document.getElementById('login-pw')?.value || '';
+        const regIdInput = document.getElementById('register-id')?.value?.trim() || '';
+        if (!name) { alert('Enter username'); return; }
+        if (!pw) { alert('Enter password'); return; }
+        if (!regIdInput) { alert('Enter Registration ID (required)'); return; }
+        const users = getUsers();
+        const hash = await hashPassword(pw);
+        const user = users.find(u => u.name === name && u.role === role && u.passwordHash === hash);
+        if (!user) { 
+            alert('Account not found or invalid credentials. Please register first.');
+            location.href = 'register.html';
+            return; 
+        }
+
+        // Require registration ID to match for all roles
+        if (user.regId) {
+          if (regIdInput !== user.regId) {
+            alert('Registration ID mismatch. Please enter the same Registration ID you used during registration.');
+            return;
+          }
+        } else {
+          // If user has no regId on file, require registration flow
+          alert('No Registration ID found for this account. Please register again or contact support.');
+          return;
+        }
+
+        if (!user.verified) {
+            // Store credentials temporarily and redirect to verification
+            sessionStorage.setItem('pending_verify', JSON.stringify({ name, role }));
+            location.href = 'verify.html';
+            return;
+        }
+        localStorage.setItem('pharma_user', JSON.stringify({ role, name }));
+        location.href = 'index.html';
+      } catch (err) {
+        console.error('Login handler error', err);
+        alert('An unexpected error occurred during sign in. See console for details.');
+      }
+    });
+  </script>
+</body>
+</html>

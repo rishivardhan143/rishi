@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PharmaChain Register</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: linear-gradient(135deg, #0d1117, #161b22);
+    }
+    .register-box {
+      background-color: #1c2128;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+      width: 350px;
+      text-align: center;
+    }
+    .register-box h1 {
+      color: #58a6ff;
+      margin-bottom: 1rem;
+    }
+    input, select {
+      width: 100%;
+      padding: 0.7rem;
+      margin-bottom: 1rem;
+      border: none;
+      border-radius: 6px;
+      background-color: #21262d;
+      color: #e6edf3;
+    }
+    input:focus {
+      outline: 2px solid #58a6ff;
+    }
+    button {
+      width: 100%;
+      background-color: #238636;
+      color: white;
+      padding: 0.7rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    button:hover {
+      background-color: #2ea043;
+    }
+    .footer-text {
+      margin-top: 1rem;
+      color: #8b949e;
+    }
+    .footer-text a {
+      color: #58a6ff;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="register-box">
+    <h1>Register Account</h1>
+    <label style="color:#cbd5e1; text-align:left; display:block; margin-bottom:6px">Role</label>
+    <select id="register-role" style="width:100%; padding:8px; border-radius:6px; margin-bottom:10px; background:#21262d; color:#e6edf3; border:none">
+      <option>Manufacturer</option>
+      <option>FDA</option>
+      <option>Distributor</option>
+      <option>Pharmacy</option>
+      <option>Patient</option>
+    </select>
+    <input type="text" id="register-name" placeholder="Username" />
+    <div class="note" style="color:#8b949e; text-align:left; margin-bottom:6px">Enter your registration ID or scan QR code:</div>
+    <input type="text" id="register-id" placeholder="Registration ID" />
+    <div style="display:flex; gap:8px; margin-bottom:12px">
+      <button id="btn-scan-qr" type="button" style="flex:1; background:#0ea5e9">Scan QR</button>
+      <button id="btn-upload-qr" type="button" style="flex:1; background:#64748b">Upload QR</button>
+    </div>
+    <input type="password" id="register-pw" placeholder="Password" />
+    <input type="password" id="register-pw2" placeholder="Confirm password" />
+    
+    <button id="btn-register" style="background:#2563eb">Register</button>
+    <div class="footer-text">
+      Already have an account? <a href="signin.html">Sign in</a>
+    </div>
+  </div>
+
+  <script>
+    // helper: hash password using SubtleCrypto SHA-256 -> hex
+    async function hashPassword(pw) {
+      try {
+        if (window.crypto && crypto.subtle && typeof crypto.subtle.digest === 'function') {
+          const enc = new TextEncoder();
+          const data = enc.encode(pw);
+          const hash = await crypto.subtle.digest('SHA-256', data);
+          return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+        }
+      } catch (e) {
+        console.warn('SubtleCrypto error, falling back to simple hash', e);
+      }
+      // fallback: simple deterministic non-cryptographic hash for demo purposes
+      let h = 5381;
+      for (let i = 0; i < pw.length; i++) h = ((h << 5) + h) + pw.charCodeAt(i) & 0xffffffff;
+      return (h >>> 0).toString(16).padStart(8, '0');
+    }
+
+    function getUsers() {
+      try { return JSON.parse(localStorage.getItem('pharma_users')||'[]'); } catch(e){return []}
+    }
+
+    function saveUsers(users){ localStorage.setItem('pharma_users', JSON.stringify(users)); }
+
+    // QR scanning setup
+    let html5QrScanner = null;
+    let scannedQR = null;
+
+    function createQrModal() {
+      if (document.getElementById('qr-modal')) return;
+      const modal = document.createElement('div');
+      modal.id = 'qr-modal';
+      modal.style = 'position:fixed; left:0; top:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.6); z-index:9999';
+      modal.innerHTML = `<div style="background:#0f1724; padding:12px; border-radius:8px; color:#e6edf3"><div id="qr-reader" style="width:320px"></div><div style="margin-top:8px; text-align:right"><button id="qr-close" style="background:#ef4444">Close</button></div></div>`;
+      document.body.appendChild(modal);
+      document.getElementById('qr-close').addEventListener('click', () => {
+        stopQrScanner();
+        modal.remove();
+      });
+    }
+
+    async function startQrScanner() {
+      createQrModal();
+      if (typeof Html5Qrcode === 'undefined') {
+        const s = document.createElement('script');
+        s.src = 'https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js';
+        document.head.appendChild(s);
+        await new Promise((res) => { s.onload = res; s.onerror = res; });
+      }
+      try {
+        html5QrScanner = new Html5Qrcode('qr-reader');
+        const config = { fps: 10, qrbox: 250 };
+        await html5QrScanner.start({ facingMode: 'environment' }, config, handleQrSuccess);
+      } catch (e) {
+        console.warn('QR scanner failed to start', e);
+        alert('Unable to start camera QR scanner. You can upload a QR image instead.');
+      }
+    }
+
+    function stopQrScanner() {
+      if (html5QrScanner && typeof html5QrScanner.stop === 'function') {
+        try { html5QrScanner.stop(); } catch(e){}
+        html5QrScanner = null;
+      }
+    }
+
+    function handleQrSuccess(qrCodeMessage) {
+      scannedQR = qrCodeMessage;
+      document.getElementById('register-id').value = scannedQR;
+      stopQrScanner();
+      const modal = document.getElementById('qr-modal'); if (modal) modal.remove();
+      alert('QR code scanned successfully!');
+    }
+
+    async function uploadQrImage() {
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+      inp.onchange = async () => {
+        const file = inp.files[0]; if (!file) return;
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.onload = async () => {
+          if (typeof jsQR === 'undefined') {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
+            document.head.appendChild(s);
+            await new Promise(res => { s.onload = res; s.onerror = res; });
+          }
+          try {
+            const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+            const ctx = c.getContext('2d'); ctx.drawImage(img,0,0);
+            const imgData = ctx.getImageData(0,0,c.width,c.height);
+            const code = jsQR(imgData.data, imgData.width, imgData.height);
+            if (code && code.data) {
+              scannedQR = code.data;
+              document.getElementById('register-id').value = scannedQR;
+              alert('QR code decoded successfully!');
+            } else {
+              alert('No QR code found in image');
+            }
+          } catch (e) { alert('Failed to decode QR image'); }
+        };
+      };
+      inp.click();
+    }
+
+    // Wire up QR scan/upload buttons
+    document.getElementById('btn-scan-qr').addEventListener('click', () => startQrScanner());
+    document.getElementById('btn-upload-qr').addEventListener('click', () => uploadQrImage());
+
+    // Registration handler
+    document.getElementById('btn-register').addEventListener('click', async () => {
+      const role = document.getElementById('register-role').value;
+      const name = document.getElementById('register-name').value?.trim();
+      const regId = document.getElementById('register-id').value?.trim();
+      const pw = document.getElementById('register-pw')?.value || '';
+      const pw2 = document.getElementById('register-pw2')?.value || '';
+      
+      if (!name) { alert('Please enter a username'); return; }
+      if (!regId) { alert('Please enter your Registration ID'); return; }
+      if (!pw) { alert('Please enter a password'); return; }
+      if (pw !== pw2) { alert('Passwords do not match'); return; }
+      
+      // If we have a scanned QR and it doesn't match the entered ID
+      if (scannedQR && scannedQR !== regId) {
+        alert('The entered Registration ID does not match the scanned QR code. Please make sure they match.');
+        return;
+      }
+
+      const users = getUsers();
+      const existingUser = users.find(u=>u.name===name && u.role===role);
+      if (existingUser) { 
+        alert('An account with this username and role already exists. Please sign in instead.');
+        location.href = 'signin.html';
+        return;
+      }
+      const hash = await hashPassword(pw);
+      users.unshift({ name, role, passwordHash: hash, regId, verified: false });
+      saveUsers(users);
+      alert('Registered successfully. Please sign in to verify your QR code.');
+      location.href = 'signin.html';
+    });
+  </script>
+</body>
+</html>

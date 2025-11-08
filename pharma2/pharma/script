@@ -1,0 +1,167 @@
+// ---------------------- Chart Setup ----------------------
+const tempCtx = document.getElementById('tempChart').getContext('2d');
+const pressCtx = document.getElementById('pressChart').getContext('2d');
+const lineTempCtx = document.getElementById('lineTemp').getContext('2d');
+const pieCtx = document.getElementById('pieStages').getContext('2d');
+
+// Dummy initial data
+let tempData = [5, 6, 7, 8];
+let pressData = [1, 1.2, 0.9, 1.1];
+let timeLabels = ["10:00", "10:05", "10:10", "10:15"];
+
+// Charts
+const tempChart = new Chart(tempCtx, {
+  type: 'line',
+  data: {
+    labels: timeLabels,
+    datasets: [{ label: 'Temperature (°C)', data: tempData, borderColor: '#007bff', tension: 0.3 }]
+  }
+});
+
+const pressChart = new Chart(pressCtx, {
+  type: 'line',
+  data: {
+    labels: timeLabels,
+    datasets: [{ label: 'Pressure (atm)', data: pressData, borderColor: '#28a745', tension: 0.3 }]
+  }
+});
+
+const lineTempChart = new Chart(lineTempCtx, {
+  type: 'line',
+  data: {
+    labels: timeLabels,
+    datasets: [{ label: 'Temperature Over Time', data: tempData, borderColor: '#ff6600', tension: 0.3 }]
+  }
+});
+
+const pieChart = new Chart(pieCtx, {
+  type: 'pie',
+  data: {
+    labels: ['Manufacturing', 'Transit', 'Storage', 'Delivered'],
+    datasets: [{ data: [3, 2, 4, 1], backgroundColor: ['#007bff', '#28a745', '#ffc107', '#17a2b8'] }]
+  }
+});
+
+// ---------------------- IoT Simulation ----------------------
+let simulation;
+const startBtn = document.getElementById('btn-generate');
+startBtn.addEventListener('click', () => {
+  if (simulation) {
+    clearInterval(simulation);
+    simulation = null;
+    startBtn.textContent = "Start IoT (simulate)";
+    return;
+  }
+  startBtn.textContent = "Stop IoT Simulation";
+  simulation = setInterval(() => {
+    const newTemp = (Math.random() * 10).toFixed(2);
+    const newPress = (Math.random() * 1.5).toFixed(2);
+    const timestamp = new Date().toLocaleTimeString();
+
+    updateCharts(newTemp, newPress, timestamp);
+    addBatchData(newTemp, newPress, timestamp);
+  }, 3000);
+});
+
+function updateCharts(temp, press, time) {
+  tempChart.data.labels.push(time);
+  tempChart.data.datasets[0].data.push(temp);
+  pressChart.data.labels.push(time);
+  pressChart.data.datasets[0].data.push(press);
+  lineTempChart.data.labels.push(time);
+  lineTempChart.data.datasets[0].data.push(temp);
+  tempChart.update();
+  pressChart.update();
+  lineTempChart.update();
+}
+
+// ---------------------- Table Handling ----------------------
+function addBatchData(temp, press, time) {
+  const table = document.querySelector("#batches-table tbody");
+  const row = document.createElement("tr");
+  const batchId = "BATCH-" + Math.floor(1000 + Math.random() * 9000);
+  const status = temp > 8 ? "⚠️ Alert" : "✅ Safe";
+  row.innerHTML = `
+    <td>${batchId}</td>
+    <td>Drug-${Math.floor(Math.random() * 100)}</td>
+    <td>Transit</td>
+    <td>Hyderabad</td>
+    <td>${temp}</td>
+    <td>${status}</td>
+    <td>${time}</td>
+  `;
+  table.appendChild(row);
+
+  if (temp > 8) {
+    addAlert("High Temp", batchId, `Temp = ${temp}°C`, time);
+  }
+}
+
+function addAlert(type, batch, cause, time) {
+  const alertTable = document.querySelector("#alerts-table tbody");
+  const row = document.createElement("tr");
+  row.innerHTML = `
+    <td>${type}</td><td>${batch}</td><td>${cause}</td><td>${time}</td><td>Notified</td>
+  `;
+  alertTable.appendChild(row);
+
+  document.getElementById("alerts-count").textContent =
+    parseInt(document.getElementById("alerts-count").textContent) + 1;
+
+  // Add blockchain record
+  addBlockchainRecord(batch, time);
+}
+
+// ---------------------- Blockchain ----------------------
+function addBlockchainRecord(batchId, time) {
+  const table = document.querySelector("#blockchain-table tbody");
+  const row = document.createElement("tr");
+  const txn = Math.floor(Math.random() * 1000000);
+  const hash = Math.random().toString(16).substring(2, 10).toUpperCase();
+  row.innerHTML = `
+    <td>${txn}</td><td>${batchId}</td><td>Factory</td><td>Distributor</td><td>${time}</td><td>${hash}</td>
+  `;
+  table.appendChild(row);
+}
+
+// ---------------------- Manual Input ----------------------
+window.submitManualIoT = function() {
+  const temp = parseFloat(document.getElementById("manual-temp").value);
+  const press = parseFloat(document.getElementById("manual-press").value);
+  const time = new Date().toLocaleTimeString();
+  if (isNaN(temp) || isNaN(press)) return alert("Enter valid temperature and pressure values!");
+  updateCharts(temp, press, time);
+  addBatchData(temp, press, time);
+  document.getElementById("manual-temp").value = "";
+  document.getElementById("manual-press").value = "";
+};
+
+// ---------------------- Export Functions ----------------------
+document.getElementById("export-csv").addEventListener("click", () => {
+  const rows = document.querySelectorAll("table tr");
+  let csv = [];
+  rows.forEach(r => {
+    const cols = r.querySelectorAll("td, th");
+    let row = [];
+    cols.forEach(c => row.push(c.innerText));
+    csv.push(row.join(","));
+  });
+  const blob = new Blob([csv.join("\n")], { type: "text/csv" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "pharmachain_data.csv";
+  a.click();
+});
+
+document.getElementById("export-pdf").addEventListener("click", () => {
+  const element = document.getElementById("content-to-export");
+  html2pdf().from(element).save("PharmaChain_Dashboard.pdf");
+});
+
+// ---------------------- Navigation Active Highlight ----------------------
+document.querySelectorAll(".nav a").forEach(link => {
+  link.addEventListener("click", function() {
+    document.querySelectorAll(".nav a").forEach(a => a.classList.remove("active"));
+    this.classList.add("active");
+  });
+});

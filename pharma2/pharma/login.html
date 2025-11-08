@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PharmaChain Login</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      background: linear-gradient(135deg, #0d1117, #161b22);
+    }
+    .login-box {
+      background-color: #1c2128;
+      padding: 2rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.4);
+      width: 350px;
+      text-align: center;
+    }
+    .login-box h1 {
+      color: #58a6ff;
+      margin-bottom: 1rem;
+    }
+    input {
+      width: 100%;
+      padding: 0.7rem;
+      margin-bottom: 1rem;
+      border: none;
+      border-radius: 6px;
+      background-color: #21262d;
+      color: #e6edf3;
+    }
+    input:focus {
+      outline: 2px solid #58a6ff;
+    }
+    button {
+      width: 100%;
+      background-color: #238636;
+      color: white;
+      padding: 0.7rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+    }
+    button:hover {
+      background-color: #2ea043;
+    }
+  </style>
+</head>
+<body>
+  <div class="login-box">
+    <h1>Sign in / Register</h1>
+    <label style="color:#cbd5e1; text-align:left; display:block; margin-bottom:6px">Role</label>
+    <select id="login-role" style="width:100%; padding:8px; border-radius:6px; margin-bottom:10px; background:#21262d; color:#e6edf3; border:none">
+      <option>Manufacturer</option>
+      <option>FDA</option>
+      <option>Distributor</option>
+      <option>Pharmacy</option>
+      <option>Patient</option>
+    </select>
+    <input type="text" id="login-name" placeholder="Display name" />
+    <input type="text" id="register-id" placeholder="Registration ID (scan QR)" style="margin-top:6px" />
+    <div style="display:flex; gap:8px; margin-bottom:8px">
+      <button id="btn-scan-qr" type="button" style="flex:1; background:#0ea5e9">Scan QR</button>
+      <button id="btn-upload-qr" type="button" style="flex:1; background:#64748b">Upload QR</button>
+    </div>
+    <input type="password" id="login-pw" placeholder="Password" />
+    <input type="password" id="login-pw2" placeholder="Confirm password (for register)" />
+    <div style="display:flex; gap:8px">
+      <button id="btn-login" style="flex:1; background:#2563eb">Sign in</button>
+      <button id="btn-register" style="flex:1; background:#64748b">Register</button>
+    </div>
+    <div style="margin-top:12px; color:#94a3b8; font-size:13px">Tip: register a test user (choose role + name + password) then sign in.</div>
+  </div>
+
+  <script>
+    // include html5-qrcode dynamically (if available)
+    // We'll create a simple modal for camera scanning
+    let html5QrScanner = null;
+    let scannedQR = null;
+
+    function createQrModal() {
+      if (document.getElementById('qr-modal')) return;
+      const modal = document.createElement('div');
+      modal.id = 'qr-modal';
+      modal.style = 'position:fixed; left:0; top:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.6); z-index:9999';
+      modal.innerHTML = `<div style="background:#0f1724; padding:12px; border-radius:8px; color:#e6edf3"><div id="qr-reader" style="width:320px"></div><div style="margin-top:8px; text-align:right"><button id="qr-close" style="background:#ef4444">Close</button></div></div>`;
+      document.body.appendChild(modal);
+      document.getElementById('qr-close').addEventListener('click', () => {
+        stopQrScanner();
+        modal.remove();
+      });
+    }
+
+    async function startQrScanner() {
+      createQrModal();
+      // load library if not loaded
+      if (typeof Html5Qrcode === 'undefined') {
+        const s = document.createElement('script');
+        s.src = 'https://unpkg.com/html5-qrcode@2.3.7/minified/html5-qrcode.min.js';
+        document.head.appendChild(s);
+        await new Promise((res) => { s.onload = res; s.onerror = res; });
+      }
+      try {
+        html5QrScanner = new Html5Qrcode('qr-reader');
+        const config = { fps: 10, qrbox: 250 };
+        await html5QrScanner.start({ facingMode: 'environment' }, config, qrCodeMessage => {
+          // on success
+          scannedQR = qrCodeMessage;
+          document.getElementById('register-id').value = scannedQR;
+          stopQrScanner();
+          const modal = document.getElementById('qr-modal'); if (modal) modal.remove();
+          alert('QR scanned: ' + scannedQR);
+        });
+      } catch (e) {
+        console.warn('QR scanner failed to start', e);
+        alert('Unable to start camera QR scanner. You can upload a QR image instead.');
+      }
+    }
+
+    function stopQrScanner() {
+      if (html5QrScanner && typeof html5QrScanner.stop === 'function') {
+        try { html5QrScanner.stop(); } catch(e){}
+        html5QrScanner = null;
+      }
+    }
+
+    // simple image upload fallback using a temporary file input and jsQR if available
+    async function uploadQrImage() {
+      const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+      inp.onchange = async () => {
+        const file = inp.files[0]; if (!file) return;
+        const img = document.createElement('img');
+        img.src = URL.createObjectURL(file);
+        img.onload = async () => {
+          // try to use jsQR if present
+          if (typeof jsQR === 'undefined') {
+            const s = document.createElement('script');
+            s.src = 'https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js';
+            document.head.appendChild(s);
+            await new Promise(res => { s.onload = res; s.onerror = res; });
+          }
+          try {
+            const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+            const ctx = c.getContext('2d'); ctx.drawImage(img,0,0);
+            const imgData = ctx.getImageData(0,0,c.width,c.height);
+            const code = jsQR(imgData.data, imgData.width, imgData.height);
+            if (code && code.data) {
+              scannedQR = code.data;
+              document.getElementById('register-id').value = scannedQR;
+              alert('QR decoded: ' + scannedQR);
+            } else {
+              alert('QR not found in image');
+            }
+          } catch (e) { alert('Failed to decode QR image'); }
+        };
+      };
+      inp.click();
+    }
+
+    // helper: hash password using SubtleCrypto SHA-256 -> hex
+    async function hashPassword(pw) {
+      try {
+        if (window.crypto && crypto.subtle && typeof crypto.subtle.digest === 'function') {
+          const enc = new TextEncoder();
+          const data = enc.encode(pw);
+          const hash = await crypto.subtle.digest('SHA-256', data);
+          return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
+        }
+      } catch (e) {
+        console.warn('SubtleCrypto error, falling back to simple hash', e);
+      }
+      // fallback: simple deterministic non-cryptographic hash for demo purposes
+      let h = 5381;
+      for (let i = 0; i < pw.length; i++) h = ((h << 5) + h) + pw.charCodeAt(i) & 0xffffffff;
+      return (h >>> 0).toString(16).padStart(8, '0');
+    }
+
+    function getUsers() {
+      try { return JSON.parse(localStorage.getItem('pharma_users')||'[]'); } catch(e){return []}
+    }
+
+    function saveUsers(users){ localStorage.setItem('pharma_users', JSON.stringify(users)); }
+
+    document.getElementById('btn-login').addEventListener('click', async () => {
+      console.log('login button clicked');
+      try {
+        const role = document.getElementById('login-role').value;
+        const name = document.getElementById('login-name').value?.trim();
+        const pw = document.getElementById('login-pw')?.value || '';
+        const regIdInput = document.getElementById('register-id')?.value?.trim() || '';
+        if (!name) { alert('Enter name'); return; }
+        const users = getUsers();
+        const hash = await hashPassword(pw);
+        const found = users.find(u => u.name === name && u.role === role && u.passwordHash === hash);
+        if (!found) { alert('Invalid credentials or account not registered'); return; }
+
+        // If the registered account has a registration ID (regId), require it for login
+        if (found.regId) {
+          if (!regIdInput) {
+            alert('This account requires a Registration ID (scan or enter it in the Registration ID field) to sign in.');
+            return;
+          }
+          // If a QR was scanned previously, prefer scannedQR variable
+          const supplied = scannedQR || regIdInput;
+          if (supplied !== found.regId) {
+            alert('Registration ID mismatch. Please scan or enter the Registration ID that you used during registration.');
+            return;
+          }
+        }
+
+        localStorage.setItem('pharma_user', JSON.stringify({ role, name }));
+        location.href = 'index.html';
+      } catch (err) {
+        console.error('Login error', err);
+        alert('An unexpected error occurred during sign in. See console for details.');
+      }
+    });
+
+    document.getElementById('btn-register').addEventListener('click', async () => {
+      const role = document.getElementById('login-role').value;
+      const name = document.getElementById('login-name').value?.trim();
+      const regId = document.getElementById('register-id').value?.trim();
+      const pw = document.getElementById('login-pw')?.value || '';
+      const pw2 = document.getElementById('login-pw2')?.value || '';
+      if (!name) { alert('Enter name'); return; }
+      if (!regId) { alert('Please scan or enter your Registration ID (QR) before registering.'); return; }
+      if (!pw) { alert('Enter password'); return; }
+      if (pw !== pw2) { alert('Passwords do not match'); return; }
+      const users = getUsers();
+      if (users.find(u=>u.name===name && u.role===role)) { alert('User with same name and role already exists'); return; }
+      // require scanned QR to match the registration ID input
+      if (!scannedQR || scannedQR !== regId) { alert('QR verification failed — please scan the QR code and ensure it matches the Registration ID field.'); return; }
+      const hash = await hashPassword(pw);
+      users.unshift({ name, role, passwordHash: hash, regId });
+      saveUsers(users);
+      alert('Registered successfully — you are now signed in');
+      localStorage.setItem('pharma_user', JSON.stringify({ role, name }));
+      location.href = 'index.html';
+    });
+
+    // wire scan/upload buttons
+    document.getElementById('btn-scan-qr').addEventListener('click', () => startQrScanner());
+    document.getElementById('btn-upload-qr').addEventListener('click', () => uploadQrImage());
+  </script>
+</body>
+</html>

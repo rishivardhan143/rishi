@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PharmaChain – IoT + Blockchain Supply Chain Dashboard</title>
+
+  <!-- External Libraries -->
+  <!-- Load Chart.js and html2pdf from CDN to avoid missing local libs -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.9.3/html2pdf.bundle.min.js"></script>
+  <!-- Leaflet for maps -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-sA+e2gF5H3b9b2qNq0lq6z0M3rZ0fY4s+vM6b9wYk0M=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-o9N1j8kXb8mQmQ7K3F0J6wz1e6b3Qxv1Kk7v9g3m0Ro=" crossorigin=""></script>
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">PharmaChain</div>
+      <nav class="nav">
+        <a href="#overview" class="active">Overview</a>
+        <a href="#batches">Batches</a>
+        <a href="#iot">IoT Data</a>
+        <a href="#alerts">Alerts</a>
+        <a href="#blockchain">Blockchain</a>
+        <a href="#analytics">Analytics</a>
+        <a href="#boxes">Box Monitoring</a>
+      </nav>
+      <div style="margin-top:auto; font-size:13px; color:rgba(255,255,255,0.85)">
+        <div id="userArea">
+          <span id="currentUser" style="display:block; margin-bottom:6px">Not signed in</span>
+          <button id="btn-logout" style="padding:6px; border-radius:4px; width:100%">Logout</button>
+        </div>
+        <!-- Quick user switcher for testing -->
+        <div id="user-switcher" style="margin-top:12px">
+          <div class="muted small" style="margin-bottom:6px">Quick switch</div>
+          <div id="user-list"></div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main" id="content-to-export">
+      <div class="header">
+        <div>
+          <div class="title">Dashboard Overview</div>
+          <div style="color:var(--muted); margin-top:6px">
+            Real-time monitoring of pharmaceutical supply chain
+          </div>
+        </div>
+        <div class="controls">
+          <button class="ghost" id="export-csv">Export CSV</button>
+          <button class="ghost" id="export-pdf">Export PDF</button>
+          <button class="primary" id="btn-generate">Start IoT (simulate)</button>
+        </div>
+      </div>
+
+      <!-- Dashboard Content Grid -->
+      <div class="grid">
+        <!-- Overview Cards -->
+        <div class="card col-span-3 stat">
+          <div class="label">Total Batches</div>
+          <div class="num" id="total-batches">3</div>
+          <div class="muted small" id="total-batches-sub">1 currently in transit</div>
+        </div>
+        <div class="card col-span-3 stat">
+          <div class="label">Active Alerts</div>
+          <div class="num" id="alerts-count">0</div>
+          <div class="muted small" id="alerts-sub">Require immediate attention</div>
+        </div>
+        <div class="card col-span-3 stat">
+          <div class="label">IoT Status</div>
+          <div class="num" id="iot-status">0/0</div>
+          <div class="muted small" id="iot-sub">Sensors operating normally</div>
+        </div>
+        <div class="card col-span-3 stat">
+          <div class="label">Compliance Rate</div>
+          <div class="num" id="compliance-rate">100%</div>
+          <div class="muted small" id="compliance-sub">% readings within safe range</div>
+        </div>
+
+        <!-- Recent Activity & Critical Alerts panels -->
+        <div class="card col-span-6" id="recent-activity">
+          <strong>Recent Activity</strong>
+          <div class="space"></div>
+          <div id="recent-activity-list" style="min-height:140px"></div>
+        </div>
+        <div class="card col-span-6" id="critical-panel">
+          <strong>Critical Alerts</strong>
+          <div class="space"></div>
+          <div id="critical-alerts-panel" style="min-height:140px"></div>
+        </div>
+
+        <!-- Batches -->
+        <div class="card col-span-12" id="batches">
+            <div style="display:flex; justify-content:space-between; align-items:center">
+            <strong>Batch Tracking</strong>
+            <div class="flex" id="manufacturerControls">
+              <button id="toggle-details" class="ghost" type="button" style="margin-left:8px">Show details</button>
+              <!-- Manufacturer add form (visible only to Manufacturer role) -->
+              <form id="manufacturer-form" style="display:flex; gap:8px; align-items:center">
+                <input id="mf-batch-id" placeholder="Batch ID" style="padding:6px; border-radius:4px;" />
+                <input id="mf-drug-name" placeholder="Drug" style="padding:6px; border-radius:4px;" />
+                <input id="mf-location" placeholder="Location" style="padding:6px; border-radius:4px; width:140px" />
+                <input id="mf-manufacture-date" type="date" style="padding:6px; border-radius:4px; width:150px" />
+                <input id="mf-qty" type="number" min="1" placeholder="Qty" style="padding:6px; border-radius:4px; width:80px" />
+                <button id="mf-add" class="ghost" type="button">Add Batch</button>
+              </form>
+            </div>
+          </div>
+          <div class="space"></div>
+          <div style="overflow:auto">
+            <table id="batches-table">
+              <thead>
+                <tr>
+                  <th>Batch ID</th><th>Drug Name</th><th>Stage</th><th>Location</th>
+                  <th>Temperature (°C)</th><th>Status</th><th>Timestamp</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+
+
+        <!-- Box Monitoring -->
+        <div class="card col-span-12" id="boxes">
+          <div style="display:flex; justify-content:space-between; align-items:center">
+            <strong>Box Monitoring</strong>
+            <div class="flex" style="gap:8px">
+              <input type="file" id="box-file-input" accept=".csv,application/json" style="display:none" />
+              <button id="btn-upload-box-file" class="ghost" type="button">Upload Box Details</button>
+              <button id="btn-scan-box" class="ghost" type="button">Scan Box QR</button>
+              <button id="btn-add-box" class="ghost" type="button">Add Box Manually</button>
+            </div>
+          </div>
+          <div class="space"></div>
+          <div class="box-monitor-grid">
+            <div class="box-table-container">
+              <table id="boxes-table">
+                <thead>
+                  <tr>
+                    <th>Box ID</th>
+                    <th>Batch</th>
+                    <th>Contents</th>
+                    <th>Status</th>
+                    <th>Location</th>
+                    <th>Last Updated</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div id="box-map" class="map-container"></div>
+          </div>
+        </div>
+
+        <!-- IoT Monitoring -->
+        <div class="card col-span-6" id="iot">
+          <strong>IoT Monitoring</strong>
+          <div class="space"></div>
+          <div style="display:flex; gap:12px; flex-wrap:wrap">
+            <div style="flex:1; min-width:220px"><canvas id="tempChart" height="160"></canvas></div>
+            <div style="flex:1; min-width:220px"><canvas id="pressChart" height="160"></canvas></div>
+          </div>
+          <div class="space"></div>
+          <div class="iot-panel">
+            <div>Safe range: <strong>2–8°C</strong></div>
+            <div style="flex:1"></div>
+            <select id="selected-batch" class="form-select">
+              <option value="BATCH-2024-001">BATCH-2024-001</option>
+              <option value="BATCH-2024-002">BATCH-2024-002</option>
+              <option value="BATCH-2024-003">BATCH-2024-003</option>
+            </select>
+            <input type="number" id="manual-temp" placeholder="Temp °C" />
+            <input type="number" id="manual-press" placeholder="Pressure atm" />
+            <button class="primary" onclick="submitManualIoT()">Submit Data</button>
+          </div>
+        </div>
+
+        <!-- Alerts -->
+        <div class="card col-span-6" id="alerts">
+          <strong>Alerts</strong>
+          <div class="space"></div>
+          <div id="alerts-list"></div>
+          <div class="space"></div>
+          <div style="overflow:auto">
+            <table id="alerts-table">
+              <thead>
+                <tr><th>Alert Type</th><th>Batch ID</th><th>Cause</th><th>Time</th><th>Action</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Blockchain -->
+        <div class="card col-span-12" id="blockchain">
+          <strong>Blockchain Records</strong>
+          <div class="space"></div>
+          <div style="overflow:auto">
+            <table id="blockchain-table">
+              <thead>
+                <tr><th>Txn ID</th><th>Batch ID</th><th>From</th><th>To</th><th>Timestamp</th><th>Location</th><th>Hash</th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Analytics -->
+        <div class="card col-span-6" id="analytics">
+          <strong>Temperature Over Time</strong>
+          <div class="space"></div>
+          <canvas id="lineTemp" height="160"></canvas>
+        </div>
+
+        <div class="card col-span-6">
+          <strong>Batches by Stage</strong>
+          <div class="space"></div>
+          <canvas id="pieStages" height="160"></canvas>
+        </div>
+      </div>
+
+      <footer>
+        Built by you • Contact: you@example.com • Demo data & simulated IoT
+      </footer>
+    </main>
+  </div>
+
+  <!-- Main Script -->
+  <script src="script.js"></script>
+</body>
+</html>
