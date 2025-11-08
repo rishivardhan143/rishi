@@ -1,0 +1,12 @@
+{
+  "name": "pharmachain-dashboard",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pharma supply chain dashboard (static site) with IoT and blockchain simulation",
+  "scripts": {
+    "start": "npx http-server ./pharma -p 3000 -c-1",
+    "start:live": "npx live-server ./pharma --port=3000"
+  },
+  "author": "",
+  "license": "MIT"
+}
